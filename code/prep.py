@@ -1,31 +1,76 @@
 import numpy as np
 import pyfits as pf
 
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-def prepare_data(data, scale=True, chop_missing=True):
+def prepare_data(data, photo_features, morph_targets, scale='MinMax', chop_missing=True,
+                 color_range=(0.025, 0.925), add_fwhms=True):
     """
     Take SDSS data and construct colors, make any cuts, and whiten (maybe).
     """
     fn = ['u', 'g', 'r', 'i', 'z']
+
     # assign and extinction correct
     e1s = np.zeros((len(data.field(0)), len(fn)))
     e2s = np.zeros((len(data.field(0)), len(fn)))
     p50s = np.zeros((len(data.field(0)), len(fn)))
     psfmags = np.zeros((len(data.field(0)), len(fn)))
+    psffwhms = np.zeros((len(data.field(0)), len(fn)))
     modelmags = np.zeros((len(data.field(0)), len(fn)))
     for i, f in enumerate(fn):
         psfmags[:, i] = data.field('psfmag_' + f) - data.field('extinction_' + f)
+        psffwhms[:, i] = data.field('psffwhm_' + f)
         modelmags[:, i] = data.field(f) - data.field('extinction_' + f)
-        #modelmags[:, i] = data.field('cmodelmag_' + f) - data.field('extinction_' + f)
 
         e1s[:, i] = data.field('me1_' + f)
         e2s[:, i] = data.field('me2_' + f)
         p50s[:, i] = data.field('petroR50_' + f)
 
-    photo = np.hstack((modelmags, psfmags))
-    # for now, just the ellipticities, and 0.5 petro radius
-    morph = np.hstack((e1s, e2s, p50s))
+    # subtract a filter
+    color_filt = 2
+    ind = np.delete(range(5), color_filt)
+    psfmags[:, ind] -= psfmags[:, color_filt, None]
+    modelmags[:, ind] -= modelmags[:, color_filt, None]
+
+    # build initial feature matrix
+    for i, f in enumerate(photo_features):
+        if f == 'psfmags':
+            new = psfmags
+        elif f == 'modelmags':
+            new = modelmags
+        if i == 0:
+            photo = new
+        else:
+            photo = np.hstack((photo, new))
+    for i, f in enumerate(morph_targets):
+        if f == 'p50':
+            new = p50s
+        elif f == 'e1':
+            new = e1s
+        elif f == 'e2':
+            new = e2s
+        if i == 0:
+            morph = new
+        else:
+            morph = np.hstack((morph, new))
+
+    # restrict color range
+    mn = 12
+    if color_range is not None:
+        for i in range(photo.shape[1]):
+            if photo[:, i].min() > mn:
+                pass
+            else:
+                bnd = np.sort(photo[:, i])[np.int(np.ceil(color_range[0] * photo.shape[0]))]
+                ind = photo[:, i] < bnd
+                photo[ind, i] = bnd
+                bnd = np.sort(photo[:, i])[np.int(np.floor(color_range[1] * photo.shape[0]))]
+                ind = photo[:, i] > bnd
+                photo[ind, i] = bnd
+
+    # tag on psffwhms
+    if add_fwhms:
+        photo = np.hstack((photo, psffwhms))
 
     # get rid of samples with missing data if desired
     ind = None
@@ -37,17 +82,17 @@ def prepare_data(data, scale=True, chop_missing=True):
         morph = morph[ind]
         photo = photo[ind]
 
-    # subtract r model mag from everything but r model mag
-    photo[:, :2] -= photo[:, 2, None]
-    photo[:, 3:] -= photo[:, 2, None]
-
     # instantiate scaler
     scalers = None
-    if scale:
+    if scale == 'MinMax':
         photo_scaler = MinMaxScaler()
         morph_scaler = MinMaxScaler()
+    if scale == 'Whiten':
+        photo_scaler = StandardScaler()
+        morph_scaler = StandardScaler()
+    if scale is not None:
         scalers = (photo_scaler, morph_scaler)
-
+        
     # apply scaling
     if scalers is not None:
         photo = photo_scaler.fit_transform(photo)
@@ -58,7 +103,7 @@ def prepare_data(data, scale=True, chop_missing=True):
 
 if __name__ == '__main__':
 
-    f = '../data/mr10k_1_rfadely.fit'
+    f = '../data/mr10k_fluxes_rfadely.fit'
     f = pf.open(f)
     data = f[1].data
     names = f[1].columns.names
@@ -70,4 +115,4 @@ if __name__ == '__main__':
     Ns = np.where(data.field('type') == 6)[0].size
     print '\nSDSS says there are %d galaxies and %d stars.\n\n' % (Ng, Ns)
 
-    prepare_data(data)
+    photo, morph, scalers, ind = prepare_data(data)
