@@ -4,7 +4,7 @@ import pyfits as pf
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 def prepare_data(data, photo_features, morph_targets, scale='MinMax', chop_missing=True,
-                 color_range=(0.025, 0.925), add_fwhms=True):
+                 color_range=(0.025, 0.925), r_modelmag_range=None):
     """
     Take SDSS data and construct colors, make any cuts, and whiten (maybe).
     """
@@ -25,6 +25,16 @@ def prepare_data(data, photo_features, morph_targets, scale='MinMax', chop_missi
         e1s[:, i] = data.field('me1_' + f)
         e2s[:, i] = data.field('me2_' + f)
         p50s[:, i] = data.field('petroR50_' + f)
+
+    # cut on magnitude range
+    if r_modelmag_range is not None:
+        ind = (modelmags[:, 2] > r_modelmag_range[0]) & (modelmags[:, 2] < r_modelmag_range[1])
+        psfmags = psfmags[ind]
+        psffwhms = psffwhms[ind]
+        modelmags = modelmags[ind]
+        e1s = e1s[ind]
+        e2s = e2s[ind]
+        p50s = p50s[ind]
 
     # subtract a filter
     color_filt = 2
@@ -69,7 +79,7 @@ def prepare_data(data, photo_features, morph_targets, scale='MinMax', chop_missi
                 photo[ind, i] = bnd
 
     # tag on psffwhms
-    if add_fwhms:
+    if photo_features[-1] == 'psffwhms':
         photo = np.hstack((photo, psffwhms))
 
     # get rid of samples with missing data if desired
@@ -90,11 +100,10 @@ def prepare_data(data, photo_features, morph_targets, scale='MinMax', chop_missi
     if scale == 'Whiten':
         photo_scaler = StandardScaler()
         morph_scaler = StandardScaler()
-    if scale is not None:
-        scalers = (photo_scaler, morph_scaler)
         
     # apply scaling
-    if scalers is not None:
+    if scale is not None:
+        scalers = (photo_scaler, morph_scaler)
         photo = photo_scaler.fit_transform(photo)
         morph = morph_scaler.fit_transform(morph)
 
