@@ -20,7 +20,8 @@ def prepare_data(data, photo_features, morph_targets, scale='MinMax', chop_missi
     for i, f in enumerate(fn):
         psfmags[:, i] = data.field('psfmag_' + f) - data.field('extinction_' + f)
         psffwhms[:, i] = data.field('psffwhm_' + f)
-        modelmags[:, i] = data.field(f) - data.field('extinction_' + f)
+        #modelmags[:, i] = data.field(f) - data.field('extinction_' + f)
+        modelmags[:, i] = data.field('cmodelmag_' + f) - data.field('extinction_' + f)
 
         e1s[:, i] = data.field('me1_' + f)
         e2s[:, i] = data.field('me2_' + f)
@@ -43,7 +44,7 @@ def prepare_data(data, photo_features, morph_targets, scale='MinMax', chop_missi
     modelmags[:, ind] -= modelmags[:, color_filt, None]
 
     # build initial feature matrix
-    for i, f in enumerate(photo_features):
+    for i, f in enumerate([photo_features[0]]):
         if f == 'psfmags':
             new = psfmags
         elif f == 'modelmags':

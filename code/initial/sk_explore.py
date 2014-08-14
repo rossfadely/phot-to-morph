@@ -77,7 +77,6 @@ def plot_r_predictions(photo, morph, scalers, regressor, seed, title, plotname, 
 
     photo = x_test
     morph = y_test
-
     if scalers is not None:
         photo = scalers[0].inverse_transform(photo)
         morph = scalers[1].inverse_transform(morph)
@@ -134,9 +133,10 @@ def plot_r_predictions(photo, morph, scalers, regressor, seed, title, plotname, 
 
 if __name__ == '__main__':
 
-    seed = 12345
+    seed = 1234567
 
-    f = '../data/mr10k_fluxes_rfadely.fit'
+    #f = '../../data/mr10k_fluxes_rfadely.fit'
+    f = '../../data/mr10k_short_rfadely.fit'
     f = pf.open(f)
     data = f[1].data
     names = f[1].columns.names
@@ -152,13 +152,14 @@ if __name__ == '__main__':
     targets = ['p50']
     mrng = np.array([15, 22])
     photo, morph, scalers, ind = prepare_data(data, features, ['p50'],
-                                              color_range=(0.025, 0.975), scale=None,
+                                              color_range=None, scale=None,
                                               r_modelmag_range=mrng)
     
     #determine_parms(photo, morph, SVR(), seed, 'SVR', 'svr_grid.txt')
 
-    rgrname = 'SVM'
-    rgr = SVR()
+    rgrname = 'KNN'
+    rgr = KNeighborsRegressor()
     title = 'Regression: %s, Features: (%s)' % (rgrname, ', '.join(features))
-    plotname = '../plots/p50_mf_r_%s_%0.2f-%0.2f.png' % (rgrname, mrng[0], mrng[1])
-    plot_r_predictions(photo, morph, scalers, rgr, seed, title, plotname, single=True)
+    #plotname = '../plots/p50_mf_r_%s_%0.2f-%0.2f.png' % (rgrname, mrng[0], mrng[1])
+    plotname='../../plots/foo.png'
+    plot_r_predictions(photo, morph, scalers, rgr, seed, title, plotname, single=False)
