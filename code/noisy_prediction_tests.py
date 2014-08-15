@@ -7,12 +7,15 @@ use('Agg')
 import numpy as np
 import matplotlib.pyplot as pl
 
-def plot_results(xaxis, data, predictions, plotname, xnames, yname, rname, fs=5, colors=None,
-                 a=0.35, s=0.8, yrng=(0.025, 0.975), crang=(0.025, 0.975), yerrs=None):
+def plot_results(x, y, yerr, nx, ny, predictions, plotname, xnames, xlabel, ylabel, rname, Ntrain,
+                 noise, fs=5, colors=None, a=0.35, s=0.8, yrng=(0.025, 0.975),
+                 crang=(0.025, 0.975),
+                 noiseax='X and Y'):
     """
     Plot the results from regression.
     """
-    title = 'N:%d, Regression: %s, Features: %s' % (data.size, rname, ', '.join(xnames))
+    title = 'N_train:%d, Ntest:%d, Regression: %s, Features: %s' % (Ntrain, x.size, rname,
+                                                                    ', '.join(xnames))
     if colors is None:
         colors = 'k'
         kwargs = {'alpha':a, 'marker':'o', 'color':'k'}
@@ -21,76 +24,82 @@ def plot_results(xaxis, data, predictions, plotname, xnames, yname, rname, fs=5,
         mx = np.sort(colors)[np.floor(crang[1] * colors.size).astype(np.int)]
         kwargs = {'alpha':a, 'marker':'o', 'c':colors, 'cmap':cm.jet, 'vmin':mn, 'vmax':mx}
 
-    residuals = data - predictions
-    fractional = residuals / data
-    xlabel = xaxis.keys()[0]
-    x = xaxis[xlabel]
+    residuals = y - predictions 
+    fractional = residuals / y
+    chi2 = (residuals / yerr) ** 2.
+    nr = y - ny
+    nf = nr / y
+    nc = (nr / yerr) ** 2.
+    
 
-    f = pl.figure(figsize=(2 * fs, fs))
-    pl.subplots_adjust(left=0.125, right=0.875, top=0.875, bottom=0.125, hspace=0.5)
-    pl.suptitle(title, fontsize=1000. / len(title))
+    f = pl.figure(figsize=(3 * fs, 3 * fs))
+    pl.subplots_adjust(left=0.125, right=0.875, top=0.875, bottom=0.125)
+    pl.suptitle(title, fontsize=1200. / len(title))
 
-    # the target
-    pl.subplot(221)
-    pl.scatter(x, data, **kwargs)
-    pl.xlabel(xlabel)
-    pl.ylabel(yname)
-    tmp = np.sort(data)
-    mn = tmp[np.ceil(data.size * yrng[0]).astype(np.int)]
-    mx = tmp[np.floor(data.size * yrng[1]).astype(np.int)]
-    pl.ylim(mn, mx)
-    pl.title('Data')
+    xs = [x, nx, x, x, x, x, x, x, x]
+    ys = [y, ny, predictions, residuals, fractional, chi2, nr, nf, nc]
+    ylabels = [ylabel, ylabel, ylabel, 'Predictions vs Original', '', '', 'Noisy vs Original', '', '']
+    titles = ['Original', noiseax + ' Noisified by %0.0f%%' % (noise * 100.), 'Predications',
+              'Residuals, median:%0.2e' % np.median(residuals),
+              'Frac. Residuals, median:%0.2e' % np.median(fractional),
+              '$\chi^2$, median:%0.2e' % np.median(chi2),
+              'Residuals, median:%0.2e' % np.median(nr),
+              'Frac. Residuals, median:%0.2e' % np.median(nf),
+              '$\chi^2$, median:%0.2e' % np.median(nc)]
 
-    # predictions
-    pl.subplot(222)
-    pl.scatter(x, predictions, **kwargs)
-    pl.xlabel(xlabel)
-    pl.ylabel(yname)
-    tmp = np.sort(predictions)
-    pl.ylim(mn, mx)
-    pl.title('Predictions')
-
-    # residuals
-    pl.subplot(223)
-    pl.scatter(x, residuals, **kwargs)
-    pl.xlabel(xlabel)
-    pl.ylabel('Residuals')
-    tmp = np.sort(residuals)
-    pl.ylim(tmp[np.ceil(data.size * yrng[0]).astype(np.int)],
-            tmp[np.floor(data.size * yrng[1]).astype(np.int)])
-    pl.title('residuals, med. abs. err:%0.2e' % np.median(np.abs(residuals)))
-
-    if yerrs is None:
-        # fractional residuals
-        pl.subplot(224)
-        pl.scatter(x, fractional, **kwargs)
+    for i in range(len(xs)):
+        pl.subplot(3, 3, i + 1)
+        pl.scatter(xs[i], ys[i], **kwargs)
         pl.xlabel(xlabel)
-        pl.ylabel('Fractional Residuals')
-        tmp = np.sort(fractional)
-        pl.ylim(tmp[np.ceil(data.size * yrng[0]).astype(np.int)],
-                tmp[np.floor(data.size * yrng[1]).astype(np.int)])
-        pl.title('residuals, med. abs. frac. err:%0.2e' % np.median(np.abs(fractional)))
-    else:
-        # chi
-        chi2 = (residuals / yerrs) ** 2.
-        pl.subplot(224)
-        pl.scatter(x, chi2, **kwargs)
-        pl.xlabel(xlabel)
-        pl.ylabel('Fractional Residuals')
-        tmp = np.sort(chi2)
-        pl.ylim(0, 10)
-        pl.title('$\chi^2$, med. $\chi^2$:%0.2e' % np.median(np.abs(chi2)))
+        pl.ylabel(ylabels[i])
+        tmp = np.sort(ys[i])
+        mn = tmp[np.ceil(y.size * yrng[0]).astype(np.int)]
+        mx = tmp[np.floor(y.size * yrng[1]).astype(np.int)]
+        pl.ylim(mn, mx)
+        pl.title(titles[i])
 
     f.savefig(plotname)
+
+def make_noisy_predictions(regressor, x, y, noisify='xy', noise_fraction=0.1, run_with_noise=False,
+                           data_fraction=0.5):
+    """
+    Noisify the specified data and make predictions.
+    """
+    xd = x.features.shape[1] / 2
+    yd = y.features.shape[1] / 2
+    x_noise, y_noise = 0., 0.
+    x_newerrs = x.features[:, xd:]
+    y_newerrs = y.features[:, yd:]
+    if 'x' in noisify: 
+        x_noise, x_newerrs = x.noisify(noise_fraction)
+    if 'y' in noisify: 
+        y_noise, y_newerrs = y.noisify(noise_fraction)
+
+    noisy_x = x.features[:, :xd] + x_noise
+    noisy_y = y.features[:, :yd] + y_noise
+    if run_with_noise:
+        noisy_x = np.hstack((noisy_x, x_newerrs))
+
+    # split the data
+    ind = np.random.permutation(y_noise.shape[0])
+    Ntrain = np.round(y_noise.shape[0] * data_fraction).astype(np.int)
+    train_ind = ind[:Ntrain]
+    test_ind = ind[Ntrain:]
+
+    # run
+    regressor.fit(noisy_x[train_ind], noisy_y[train_ind])
+    predictions = regressor.predict(noisy_x[test_ind])
+
+    return noisy_x, noisy_y, predictions, train_ind, test_ind
 
 if __name__ == '__main__':
 
     import pyfits as pf
 
-    seed = 12345
+    seed = 1234
     np.random.seed(seed)
 
-    n = '../data/mr10k_short_rfadely.fit'
+    n = '../data/sdss30k_rfadely.fit'
     f = pf.open(n)
     data = f[1].data
     names = f[1].columns.names
@@ -101,46 +110,52 @@ if __name__ == '__main__':
     Ng = np.where(data.field('type') == 3)[0].size
     Ns = np.where(data.field('type') == 6)[0].size
     print '\nSDSS says there are %d galaxies and %d stars.\n\n' % (Ng, Ns)
-
+    
+    ylim = np.inf
+    featurenames = ['cmodelmag', 'psffwhm', 'petror50', 'petror90']
     targetnames = ['psfmag', 'cmodelmag']
-    featurenames = ['cmodelmag', 'psffwhm', 'petroR50']
     filters = ['u', 'g', 'r', 'i', 'z']
 
-    # extract x and y
     x = FeatureExtractor(data, featurenames, filters, color_band='r', scale_kind=None,
                          mag_range=None)
-    #proj, lats = x.run_hmf(9)
-    #x.features[:, :10] = proj
     data = data[x.idx]
     y = FeatureExtractor(data, targetnames, filters, color_band=None, scale_kind=None,
                          mag_range=None)
-    x.features = x.features[y.idx, :15]
 
-    yerrs = np.sqrt(y.features[:, 10:15] ** 2. + y.features[:, 15:20] ** 2.)
-    y.features = y.features[:, :5] - y.features[:, 5:10]
+    # taylor to target, set for psf - model
+    y.features[:, :5] = y.features[:, :5] - y.features[:, 5:10]
+    y.features[:, 5:10] = np.sqrt(y.features[:, 10:15] ** 2. + y.features[:, 15:20] ** 2.)
+    y.features = y.features[:, :10]
 
-    #yerrs = y.features[:, 5:]
-    #y.features = y.features[:, :5]
-    ind = y.features[:, 2] < 1.0
+    # restrict x range
+    xlim = (20.5, 21.5)
+    ind = (x.features[:, 2] > xlim[0]) & (x.features[:, 2] < xlim[1])
     x.features = x.features[ind]
     y.features = y.features[ind]
     y.Ndata = y.features.shape[0]
 
-    # split the data
-    np.random.seed(seed)
-    ind = np.random.permutation(y.Ndata)
-    Ntrain = np.round(y.Ndata / 2.).astype(np.int)
-    xtrain = x.features[ind[:Ntrain]]
-    ytrain = y.features[ind[:Ntrain]]
-    xtest = x.features[ind[Ntrain:]]
-    ytest = y.features[ind[Ntrain:]]
-    yerrs = yerrs[ind[Ntrain:]]
+    # restrict y range
+    ylim = 0.5
+    ind = y.features[:, 2] < ylim
+    x.features = x.features[ind]
+    y.features = y.features[ind]
+    y.Ndata = y.features.shape[0]
 
-    # run
-    rgr = KNeighborsRegressor()
-    rgr.fit(xtrain, ytrain)
-    predictions = rgr.predict(xtest)
+    # specify scikit regressor
+    rname = 'RF'
+    if rname == 'KNN':
+        rgr = KNeighborsRegressor(n_neighbors=8)
+    if rname == 'RF':
+        rgr = RandomForestRegressor(n_estimators=16)
 
-    plot_results({'r mag':xtest[:, 2]}, ytest[:, 2], predictions[:, 2],
-                 '../plots/psfminusmodel_mfp_knn_1.0.png',
-                 featurenames, 'psfmag - modelmag', 'KNN', yerrs=yerrs[:, 2], colors=xtest[:, 1])
+    nf = 0.5
+    nx, ny, pre, trn, test = make_noisy_predictions(rgr, x, y, noisify='xy',
+                                                    noise_fraction=nf,
+                                                    run_with_noise=True, data_fraction=0.5)
+
+    xlabel = 'r mag'
+    ylabel = 'r psfmag - modelmag'
+    plotname = '../plots/foo.png'
+    plot_results(x.features[test, 2], y.features[test, 2], y.features[test, 7], nx[test, 2],
+                 ny[test, 2], pre[:, 2], plotname, featurenames, xlabel, ylabel, rname, trn.size, nf,
+                 colors=x.features[test, 1])

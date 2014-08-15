@@ -26,7 +26,7 @@ class FeatureExtractor(object):
         self.features = np.zeros((self.Ndata, self.Nfeatures))
         for i, n in enumerate(self.feature_names):
             for f in filters:
-                self.features[:, ind] = data.field(n + '_' + f)
+                self.features[:, ind] = data.field(n + '_' + f).copy()
                 if 'mag' in n:
                     self.features[:, ind] -= data.field('extinction_' + f)
                 ind += 1
@@ -84,7 +84,7 @@ class FeatureExtractor(object):
         ind = 0
         for i, n in enumerate(self.feature_names):
             if 'mag' in n:
-                mag = data.field(n + '_' + color_band)
+                mag = data.field(n + '_' + color_band).copy()
                 mag -= data.field('extinction_' + color_band)
             for f in filters:
                 if f == color_band:
@@ -134,14 +134,13 @@ class FeatureExtractor(object):
 
     def noisify(self, fraction):
         """
-        Add noise to the data, increasing by the specified fraction.
+        Create and return gaussian noise.
         """
         D = self.features.shape[1] / 2
         new_errs = (1. + fraction) * self.features[:, -D:]
         diff = np.sqrt(new_errs ** 2. - self.features[:, -D:] ** 2.)
         noise = np.random.randn(self.features.shape[0], D) * diff
-        self.features[:, :D] += noise
-        self.features[:, -D:] = new_errs
+        return noise, new_errs
 
 if __name__ == '__main__':
 
@@ -159,10 +158,8 @@ if __name__ == '__main__':
     Ns = np.where(data.field('type') == 6)[0].size
     print '\nSDSS says there are %d galaxies and %d stars.\n\n' % (Ng, Ns)
 
-    names = ['cmodelmag']
+    names = ['cmodelmag', 'psfmag']
     filters = ['u', 'g', 'r', 'i', 'z']
 
     f = FeatureExtractor(data, names, filters, color_band=None, scale_kind=None,
-                         mag_range={'r':(18., 19.)})
-    #projs, lats =f.run_hmf(4)
-    #f.noisify(0.1)
+                         mag_range=None, cut_missing=False)
