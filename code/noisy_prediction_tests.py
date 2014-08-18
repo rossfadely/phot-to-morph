@@ -1,3 +1,4 @@
+from hmf import HMF
 from feature_extraction import FeatureExtractor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import RandomForestRegressor
@@ -26,12 +27,11 @@ def plot_results(x, y, yerr, nx, ny, predictions, plotname, xnames, xlabel, ylab
 
     residuals = y - predictions 
     fractional = residuals / y
-    chi2 = (residuals / yerr) ** 2.
+    chi2 = (residuals / yerr)
     nr = y - ny
     nf = nr / y
-    nc = (nr / yerr) ** 2.
+    nc = (nr / yerr)
     
-
     f = pl.figure(figsize=(3 * fs, 3 * fs))
     pl.subplots_adjust(left=0.125, right=0.875, top=0.875, bottom=0.125)
     pl.suptitle(title, fontsize=1200. / len(title))
@@ -45,7 +45,7 @@ def plot_results(x, y, yerr, nx, ny, predictions, plotname, xnames, xlabel, ylab
               '$\chi^2$, median:%0.2e' % np.median(chi2),
               'Residuals, median:%0.2e' % np.median(nr),
               'Frac. Residuals, median:%0.2e' % np.median(nf),
-              '$\chi^2$, median:%0.2e' % np.median(nc)]
+              '$\chi$, median:%0.2e' % np.median(nc)]
 
     for i in range(len(xs)):
         pl.subplot(3, 3, i + 1)
@@ -59,6 +59,19 @@ def plot_results(x, y, yerr, nx, ny, predictions, plotname, xnames, xlabel, ylab
         pl.title(titles[i])
 
     f.savefig(plotname)
+
+    bins = 64
+    x = np.linspace(-5, 5, 5000)
+    f = pl.figure(figsize=(2 * fs, fs))
+    pl.subplot(121)
+    pl.hist(chi2, bins, color='#FF9900', alpha=a, label='Predictions', normed=True)
+    pl.plot(x, np.exp(-x ** 2.) / np.sqrt(2. * np.pi), 'k')
+    pl.xlabel('$\chi$')
+    pl.subplot(122)
+    pl.hist(nc, bins, color='g', alpha=a, label='Noisy Data', normed=True)
+    pl.plot(x, np.exp(-x ** 2.) / np.sqrt(2. * np.pi), 'k')
+    pl.xlabel('$\chi$')
+    pl.savefig('../plots/foo.png')
 
 def make_noisy_predictions(regressor, x, y, noisify='xy', noise_fraction=0.1, run_with_noise=False,
                            data_fraction=0.5):
@@ -77,6 +90,12 @@ def make_noisy_predictions(regressor, x, y, noisify='xy', noise_fraction=0.1, ru
 
     noisy_x = x.features[:, :xd] + x_noise
     noisy_y = y.features[:, :yd] + y_noise
+
+    #from sklearn.decomposition import PCA, KernelPCA
+    #m = KernelPCA()
+    #proj = m.fit_transform(noisy_x)
+    #noisy_x = np.hstack((noisy_x, proj))
+
     if run_with_noise:
         noisy_x = np.hstack((noisy_x, x_newerrs))
 
@@ -128,7 +147,7 @@ if __name__ == '__main__':
     y.features = y.features[:, :10]
 
     # restrict x range
-    xlim = (20.5, 21.5)
+    xlim = (18.5, 19.5)
     ind = (x.features[:, 2] > xlim[0]) & (x.features[:, 2] < xlim[1])
     x.features = x.features[ind]
     y.features = y.features[ind]
@@ -146,7 +165,7 @@ if __name__ == '__main__':
     if rname == 'KNN':
         rgr = KNeighborsRegressor(n_neighbors=8)
     if rname == 'RF':
-        rgr = RandomForestRegressor(n_estimators=16)
+        rgr = RandomForestRegressor(n_estimators=128)
 
     nf = 0.5
     nx, ny, pre, trn, test = make_noisy_predictions(rgr, x, y, noisify='xy',
@@ -155,7 +174,7 @@ if __name__ == '__main__':
 
     xlabel = 'r mag'
     ylabel = 'r psfmag - modelmag'
-    plotname = '../plots/foo.png'
+    plotname = '../plots/psfminummodel_RF_photandmorph_19.png'
     plot_results(x.features[test, 2], y.features[test, 2], y.features[test, 7], nx[test, 2],
                  ny[test, 2], pre[:, 2], plotname, featurenames, xlabel, ylabel, rname, trn.size, nf,
                  colors=x.features[test, 1])
